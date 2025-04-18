@@ -51,7 +51,7 @@ def generate_pdf_report(domain_or_ip, info):
     safe_filename = domain_or_ip.replace('.', '_').replace(':', '_')
     filename = f"Threat_Report_{safe_filename}.pdf"
     pdf.output(filename)
-    print(f"✅ PDF report saved as {filename}")
+    print(f"PDF report saved as {filename}")
 
 def main():
     user_input = input("Enter domains, IPs, or URLs (comma-separated):\n> ")
