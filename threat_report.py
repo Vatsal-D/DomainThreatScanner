@@ -1,62 +1,68 @@
 import requests
+from urllib.parse import urlparse
 from fpdf import FPDF
 
-# Replace with your actual VirusTotal API key
 API_KEY = "c10060dfe432faf28e1f96cdbc0de7e9726765c7819bc019d8728bbcabe48cfd"
-headers = {
-    "x-apikey": API_KEY
-}
 
-#Get multiple domains from user input
-input_domains = input("Enter domain(s) separated by commas (e.g., google.com, youtube.com): ")
-domains = [d.strip() for d in input_domains.split(",") if d.strip()]
+def extract_domain(input_value):
+    parsed = urlparse(input_value)
+    host = parsed.netloc if parsed.netloc else parsed.path
+    # Remove port number if present
+    return host.split(':')[0]
 
-#Loop through each domain
-for domain in domains:
-    print(f"\n🔍 Fetching data for: {domain}")
-    url = f"https://www.virustotal.com/api/v3/domains/{domain}"
+def get_vt_url(domain_or_ip):
+    if all(c.isdigit() or c == '.' for c in domain_or_ip):  # IP check
+        return f"https://www.virustotal.com/api/v3/ip_addresses/{domain_or_ip}"
+    else:
+        return f"https://www.virustotal.com/api/v3/domains/{domain_or_ip}"
 
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as err:
-        print(f" Failed to get data for {domain}. HTTP Error: {err}")
-        continue
-    except Exception as e:
-        print(f" Unexpected error for {domain}: {e}")
-        continue
+def fetch_virustotal_data(domain_or_ip):
+    url = get_vt_url(domain_or_ip)
+    headers = {"x-apikey": API_KEY}
+    response = requests.get(url, headers=headers)
 
-    data = response.json()
-    attributes = data.get("data", {}).get("attributes", {})
+    if response.status_code != 200:
+        print(f"❌ Failed to get data for {domain_or_ip}. Status Code: {response.status_code}")
+        return None
+    return response.json().get("data", {}).get("attributes", {})
 
-    #Create PDF report
+def generate_pdf_report(domain_or_ip, info):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", size=16)
-    pdf.cell(200, 10, "Threat Intelligence Report", ln=True, align='C')
+    pdf.set_font("Arial", size=14)
+    pdf.cell(200, 10, txt="Threat Intelligence Report", ln=True, align='C')
     pdf.ln(10)
 
     pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, f"Domain: {domain}", ln=True)
+    pdf.cell(200, 10, txt=f"Target: {domain_or_ip}", ln=True)
     pdf.ln(5)
 
-    for key, value in attributes.items():
+    for key, value in info.items():
         pdf.set_font("Arial", 'B', size=12)
-        pdf.cell(200, 10, f"{key}:", ln=True)
+        pdf.cell(200, 10, txt=f"{key}:", ln=True)
         pdf.set_font("Arial", size=12)
-
         if isinstance(value, dict):
-            for sub_key, sub_value in value.items():
-                pdf.multi_cell(0, 10, f"   {sub_key}: {sub_value}")
-        elif isinstance(value, list):
-            for item in value:
-                pdf.multi_cell(0, 10, f"   - {item}")
+            for k, v in value.items():
+                pdf.cell(200, 10, txt=f"   {k}: {v}", ln=True)
         else:
-            pdf.multi_cell(0, 10, str(value))
+            pdf.multi_cell(200, 10, txt=str(value))
+        pdf.ln(5)
 
-        pdf.ln(3)
-
-    #Save PDF
-    filename = f"Threat_Report_{domain.replace('.', '_')}.pdf"
+    safe_filename = domain_or_ip.replace('.', '_').replace(':', '_')
+    filename = f"Threat_Report_{safe_filename}.pdf"
     pdf.output(filename)
-    print(f" Report saved: {filename}")
+    print(f"✅ PDF report saved as {filename}")
+
+def main():
+    user_input = input("Enter domains, IPs, or URLs (comma-separated):\n> ")
+    items = [x.strip() for x in user_input.split(',') if x.strip()]
+
+    for item in items:
+        domain_or_ip = extract_domain(item)
+        print(f"\n🔍 Fetching threat data for: {domain_or_ip}")
+        info = fetch_virustotal_data(domain_or_ip)
+        if info:
+            generate_pdf_report(domain_or_ip, info)
+
+if __name__ == "__main__":
+    main()
